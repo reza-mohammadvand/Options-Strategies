@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>قدرت خریدار / فروشنده</title>
+
+<style>
+    td{
+        direction: ltr;
+    }
+body { font-family: Arial; direction: rtl; text-align: center; }
+table { border-collapse: collapse; margin: auto; width: 80%; }
+th, td { border: 1px solid black; padding: 10px; }
+
+.green { background-color: #c8f7c5; }
+.red { background-color: #f7c5c5; }
+
+.pos { color: green; font-weight: bold; }
+.neg { color: red; font-weight: bold; }
+</style>
+
+</head>
+<body>
+
+<h2>قدرت خریدار به فروشنده</h2>
+<h2><button onclick="downloadExcel()">📥 دانلود اکسل</button></h2>
+
+<table>
+<thead>
+<tr>
+    <th>ردیف</th>
+    <th>زمان</th>
+    <th>ارزش خرید</th>
+    <th>ارزش فروش</th>
+    <th>نسبت</th>
+    <th>تغییر نسبت در 5 ثانیه</th>
+    <th>تغییر نسبت در 30 ثانیه</th>
+    <th>نسبت به میانگین 10 دقیقه (%)</th>
+    <th>آخرین قیمت</th>
+    <th>تغییر قیمت (%)</th>
+</tr>
+</thead>
+
+<tbody id="tableBody"></tbody>
+</table>
+
+<script>
+
+function downloadExcel() {
+    window.location.href = "/export";
+}
+
+let counter = 1;
+let ratioHistory = [];
+let priceHistory = [];
+
+function safeNumber(val) {
+    return (val !== null && val !== undefined)
+        ? Number(val).toLocaleString()
+        : "-";
+}
+
+function fetchData() {
+
+    fetch("/data")
+    .then(res => res.json())
+    .then(data => {
+
+        // گرفتن آخرین دیتا
+        let last = data[data.length - 1];
+        if (!last) return;
+
+        // ================= نسبت =================
+        let ratio = last.ratio ?? 0;
+        ratioHistory.push(ratio);
+
+        // ================= قیمت =================
+        let price = last.price ?? null;
+        priceHistory.push(price);
+
+        // ================= میانگین 10 دقیقه =================
+        let avg10 = "-";
+        let avg10Class = "";
+
+        let now = Date.now() / 1000;
+
+        let last10m = ratioHistory
+            .map((r, i) => ({
+                r,
+                t: now - (ratioHistory.length - i) * 5
+            }))
+            .filter(x => x.t >= now - 600 && x.r != null);
+
+        if (last10m.length > 0) {
+            let avg = last10m.reduce((a,b)=> a + b.r, 0) / last10m.length;
+
+            if (avg !== 0) {
+                let val = ((ratio / avg) - 1) * 100;
+                avg10 = val.toFixed(2);
+
+                if (val > 0) avg10Class = "pos";
+                else if (val < 0) avg10Class = "neg";
+            }
+        }
+
+        // ================= تغییر نسبت (5 ثانیه) =================
+        let delta1 = "-";
+        let delta1Class = "";
+
+        if (ratioHistory.length > 1) {
+            let prev = ratioHistory[ratioHistory.length - 2];
+
+            if (prev && prev !== 0) {
+                let val = ((ratio / prev) - 1) * 100;
+                delta1 = val.toFixed(2);
+
+                if (val > 0) delta1Class = "pos";
+                else if (val < 0) delta1Class = "neg";
+            }
+        }
+
+        // ================= تغییر نسبت (30 ثانیه) =================
+        let delta6 = "-";
+        let delta6Class = "";
+
+        if (ratioHistory.length > 6) {
+            let oldRatio = ratioHistory[ratioHistory.length - 7];
+
+            if (oldRatio && oldRatio !== 0) {
+                let val = ((ratio / oldRatio) - 1) * 100;
+                delta6 = val.toFixed(2);
+
+                if (val > 0) delta6Class = "pos";
+                else if (val < 0) delta6Class = "neg";
+            }
+        }
+
+        // ================= تغییر قیمت =================
+        let priceChange = "-";
+        let priceChangeClass = "";
+
+        if (priceHistory.length > 1) {
+            let prevPrice = priceHistory[priceHistory.length - 2];
+
+            if (prevPrice && prevPrice !== 0 && price) {
+                let val = ((price / prevPrice) - 1) * 100;
+                priceChange = val.toFixed(2);
+
+                if (val > 0) priceChangeClass = "pos";
+                else if (val < 0) priceChangeClass = "neg";
+            }
+        }
+
+        // ================= رنگ ردیف =================
+        let colorClass = "";
+        if (ratio > 1) colorClass = "green";
+        else if (ratio < 1) colorClass = "red";
+
+        // ================= ساخت ردیف =================
+        let row = `
+        <tr class="${colorClass}">
+            <td>${counter++}</td>
+            <td>${last.time}</td>
+            <td>${safeNumber(last.buy)}</td>
+            <td>${safeNumber(last.sell)}</td>
+            <td>${ratio}</td>
+            <td class="${delta1Class}">${delta1} %</td>
+            <td class="${delta6Class}">${delta6} %</td>
+            <td class="${avg10Class}">${avg10} %</td>
+            <td>${safeNumber(price)}</td>
+            <td class="${priceChangeClass}">${priceChange} %</td>
+        </tr>
+        `;
+
+        document.getElementById("tableBody").innerHTML =
+            row + document.getElementById("tableBody").innerHTML;
+
+    })
+    .catch(err => console.error(err));
+}
+
+setInterval(fetchData, 5000);
+fetchData();
+
+</script>
+</body>
+</html>

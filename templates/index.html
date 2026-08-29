@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>Options Dashboard</title>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="../static/logo.png" type="image/png" />
+
+</head>
+<body>
+
+<h1>Options <p style="display: inline; margin: 0 5px;"> </p> Market</h1>
+
+
+<div class="tabs">
+
+    <button class="tab-btn active" data-tab="market">Market</button>
+    <button class="tab-btn" data-tab="spread">Bull Spread</button>
+</div>
+
+<div id="market" class="tab-content active">
+
+<!-- 🔍 FILTER BOX -->
+<div id="filter-box">
+
+    <h2></h2>
+    <!-- نماد پایه -->
+<!-- <select
+    id="filter-base-symbol"
+    multiple
+    size="6"
+    title="برای انتخاب چند نماد از Ctrl یا Command استفاده کنید"
+><option value="">نماد پایه</option>
+ <option>وتعاون</option>
+<option>خبهمن</option>
+<option>اهرم</option>
+<option>موج</option>
+<option>فملی</option>
+<option>وبملت</option>
+<option>اخابر</option>
+<option>کاریس</option>
+<option>فولاد</option>
+<option>فصبا</option>
+<option>فزر</option>
+<option>فرابورس</option>
+<option>طعام</option>
+<option>وبصادر</option>
+<option>شپنا</option>
+<option>خگستر</option>
+<option>خساپا</option>
+<option>سامان</option>
+<option>رویین</option>
+<option>خودران</option>
+<option>ذوب</option>
+<option>خودرو</option>
+<option>خاور</option>
+<option>جهش</option>
+<option>وتجارت</option>
+<option>تیام</option>
+<option>توان</option>
+<option>تاصیکو</option>
+<option>شتاب</option>
+<option>پناه</option>
+<option>پتروآبان</option>
+<option>پادا</option>
+<option>بیدار</option>
+<option>بساما</option>
+<option>امین شهر</option>
+<option>اطلس</option>
+<option>آساس</option>
+<option>نارنج</option>
+<option>شستا</option>
+    </select> -->
+
+    <div
+    id="filter-base-symbol"
+    class="check-dropdown"
+    data-placeholder="نماد پایه"
+>
+    <button
+        type="button"
+        class="check-dropdown-toggle"
+        aria-expanded="false"
+    >
+        <span class="check-dropdown-label">
+            نماد پایه
+        </span>
+
+        <span class="check-dropdown-arrow">
+            ▼
+        </span>
+    </button>
+
+    <div class="check-dropdown-menu"></div>
+</div>
+
+    <!-- نماد -->
+    <input type="text" id="filter-symbol" placeholder="نماد اختیار">
+
+    <!-- وضعیت -->
+    <select id="filter-status">
+        <option value="">همه وضعیت‌ها</option>
+        <option value="ITM">در سود (ITM)</option>
+        <option value="ATM">در نقطه (ATM)</option>
+        <option value="OTM">خارج از سود (OTM)</option>
+    </select>
+    <!-- ارزش معاملات -->
+    <div class="filter-group">
+        <input type="number" id="filter-value" placeholder="ارزش معاملات (میلیون ریال)">
+        
+        <div class="arrow-buttons">
+            <button onclick="setValueFilter('gt')" id="value-up">⬆</button>
+            <button onclick="setValueFilter('lt')" id="value-down">⬇</button>
+        </div>
+    </div>
+
+    <!-- روز باقی‌مانده -->
+    <div class="filter-group">
+        <input type="number" id="filter-days" placeholder="روز تا سررسید">
+        
+        <div class="arrow-buttons">
+            <button onclick="setDaysFilter('gt')" id="days-up">⬆</button>
+            <button onclick="setDaysFilter('lt')" id="days-down">⬇</button>
+        </div>
+    </div>
+
+    <br><br>
+
+    <!-- دکمه‌ها -->
+    <button onclick="applyFilters(), loadData()">اعمال فیلتر</button>
+    <button onclick="resetFilters()">ریست</button>
+<br>
+
+<div class="result">
+
+<table id="table">
+    <thead></thead>
+    <tbody>
+        <tr>
+            <td>
+                برای مشاهده نتایج، فیلترها را اعمال کنید
+            </td>
+        </tr>
+    </tbody>
+</table>
+</div>
+</div>
+
+
+
+
+</div>
+
+<div id="spread" class="tab-content">
+
+    <div class="spread">
+
+        <h2 style="width: 100%; text-align: center;"></h2>
+
+        <div class="spread-filter">
+
+            <!-- نماد پایه -->
+<!-- <select
+    id="spread-base-symbol"
+    multiple
+    size="6"
+    title="برای انتخاب چند نماد از Ctrl یا Command استفاده کنید"
+><option value="">نماد پایه</option>
+<option>وتعاون</option>
+<option>خبهمن</option>
+<option>اهرم</option>
+<option>موج</option>
+<option>فملی</option>
+<option>وبملت</option>
+<option>اخابر</option>
+<option>کاریس</option>
+<option>فولاد</option>
+<option>فصبا</option>
+<option>فزر</option>
+<option>فرابورس</option>
+<option>طعام</option>
+<option>وبصادر</option>
+<option>شپنا</option>
+<option>خگستر</option>
+<option>خساپا</option>
+<option>سامان</option>
+<option>رویین</option>
+<option>خودران</option>
+<option>ذوب</option>
+<option>خودرو</option>
+<option>خاور</option>
+<option>جهش</option>
+<option>وتجارت</option>
+<option>تیام</option>
+<option>توان</option>
+<option>تاصیکو</option>
+<option>شتاب</option>
+<option>پناه</option>
+<option>پتروآبان</option>
+<option>پادا</option>
+<option>بیدار</option>
+<option>بساما</option>
+<option>امین شهر</option>
+<option>اطلس</option>
+<option>آساس</option>
+<option>نارنج</option>
+<option>شستا</option>    </select> -->
+<div
+    id="spread-base-symbol"
+    class="check-dropdown"
+    data-placeholder="نماد پایه"
+>
+    <button
+        type="button"
+        class="check-dropdown-toggle"
+        aria-expanded="false"
+    >
+        <span class="check-dropdown-label">
+            نماد پایه
+        </span>
+
+        <span class="check-dropdown-arrow">
+            ▼
+        </span>
+    </button>
+
+    <div class="check-dropdown-menu"></div>
+</div>
+    <!-- ارزش معاملات (فقط بیشتر از) -->
+    <input type="number" id="spread-value" placeholder="ارزش معاملات (بیشتر از)">
+
+    <!-- روز باقی‌مانده -->
+    <div class="spread-days-box">
+
+        <input style="height: 44px;" type="number" id="spread-days" placeholder="روز تا سررسید">
+<div class="checkbox-group arrow-buttons">
+    <div class="checkbox-group arrow-buttons">
+
+    <button
+        type="button"
+        id="days-up-spread"
+        onclick="setSpreadDaysFilter('gte')"
+        title="بیشتر یا مساوی"
+    >
+        ⬆
+    </button>
+
+    <button
+        type="button"
+        id="days-down-spread"
+        onclick="setSpreadDaysFilter('lte')"
+        title="کمتر یا مساوی"
+    >
+        ⬇
+    </button>
+
+    <button
+        type="button"
+        id="days-equal-spread"
+        onclick="setSpreadDaysFilter('eq')"
+        title="مساوی"
+    >
+        =
+    </button>
+
+</div>
+</div>
+
+    </div>
+
+    <br>
+<div
+    class="spread-filter-btn"
+    style="margin-top: 25px;"
+>
+    <button
+        type="button"
+        id="apply-spread-filter"
+        onclick="loadSpreadData()"
+    >
+        اعمال فیلتر
+    </button>
+
+    <button
+        type="button"
+        id="calculate-spread-button"
+        onclick="calculateSpreadTable()"
+        disabled
+    >
+        اسپرد
+    </button>
+</div>
+<div class="spread-result">
+
+<table id="spread-table">
+
+    <!-- سرستون‌ها توسط JavaScript ساخته می‌شوند -->
+    <thead></thead>
+
+    <tbody>
+        <tr>
+            <td>
+                برای مشاهده نتایج، فیلترها را اعمال کنید
+            </td>
+        </tr>
+    </tbody>
+
+</table>
+
+</div>
+
+<div class="spread-calculation-result">
+
+    <h2 class="spread-calculation-title">
+        محاسبات اسپرد
+    </h2>
+
+    <table id="spread-calculation-table">
+
+        <!-- سرستون‌ها توسط JavaScript ساخته می‌شوند -->
+        <thead></thead>
+
+        <tbody>
+            <tr>
+                <td>
+                    ابتدا فیلترها را اعمال کرده و سپس دکمه اسپرد را بزنید
+                </td>
+            </tr>
+        </tbody>
+
+    </table>
+
+</div>
+        </div>
+    
+
+    </div>
+
+
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
