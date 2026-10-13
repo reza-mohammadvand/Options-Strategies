@@ -660,6 +660,18 @@
                 >
                 <button id="show-expiring-options" type="button" disabled>نمایش سررسیدها</button>
             </div>
+
+            <div class="expectations-market-share-filter">
+                <input
+                    id="expectations-market-share-count"
+                    type="number"
+                    min="1"
+                    step="1"
+                    inputmode="numeric"
+                    placeholder="تعداد نماد"
+                >
+                <button id="show-market-share-options" type="button" disabled>برترین ارزش معاملات</button>
+            </div>
         </div>
 
         <div id="expectations-loading" class="expectations-state">در حال دریافت و محاسبه اطلاعات...</div>
@@ -686,6 +698,33 @@
                         <th data-sort-type="number" tabindex="0">ماکسیمم فاصله تا سر‌به‌سر <span class="expectations-sort-indicator">↕</span></th>
                         <th data-sort-type="number" tabindex="0">میانگین وزنی <span class="expectations-sort-indicator">↕</span></th>
                         <th>جزئیات</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+<div id="market-share-options-modal" class="expectations-modal" hidden>
+    <div class="expectations-modal-backdrop" data-close-market-share-options-modal></div>
+    <section class="expectations-modal-card market-share-options-modal-card" role="dialog" aria-modal="true" aria-labelledby="market-share-options-modal-title">
+        <header>
+            <h3 id="market-share-options-modal-title">برترین نمادها از نظر سهم ارزش معاملات</h3>
+            <button type="button" class="expectations-modal-close" data-close-market-share-options-modal aria-label="بستن">×</button>
+        </header>
+        <div class="expectations-detail-table-wrap">
+            <table class="expectations-table expectations-summary-table market-share-options-table">
+                <thead>
+                    <tr>
+                        <th data-sort-type="number" tabindex="0">رتبه <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="text" tabindex="0">نماد اختیار <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="text" tabindex="0">نماد پایه <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="number" tabindex="0">روز تا سررسید <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="number" tabindex="0">ارزش معاملات (میلیون ریال) <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="number" tabindex="0">سهم از کل بازار اختیار <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="number" tabindex="0">فاصله تا سر‌به‌سر <span class="expectations-sort-indicator">↕</span></th>
+                        <th data-sort-type="number" tabindex="0">بازدهی مؤثر <span class="expectations-sort-indicator">↕</span></th>
                     </tr>
                 </thead>
                 <tbody></tbody>

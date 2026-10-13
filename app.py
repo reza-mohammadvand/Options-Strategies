@@ -1794,8 +1794,23 @@ def generate_market_expectations(use_saved_trade_value=False):
             "فایل ارزش معاملات ذخیره‌شده وجود ندارد یا خالی است."
         )
 
+    all_option_trade_values = (
+        snapshot_values if use_snapshot else collect_trade_values(rows)
+    )
+
     if not use_snapshot:
-        save_trade_value_snapshot(collect_trade_values(rows))
+        save_trade_value_snapshot(all_option_trade_values)
+
+    total_option_market_trade_value = 0
+    for saved_item in all_option_trade_values.values():
+        raw_trade_value = (
+            saved_item.get("trade_value")
+            if isinstance(saved_item, dict)
+            else saved_item
+        )
+        parsed_trade_value = parse_number(raw_trade_value)
+        if parsed_trade_value is not None and parsed_trade_value > 0:
+            total_option_market_trade_value += parsed_trade_value
 
     grouped = {}
     discovered_roots = set()
@@ -1823,6 +1838,7 @@ def generate_market_expectations(use_saved_trade_value=False):
         strike_match = re.search(r"-([\d,.]+)-", description)
         strike = parse_number(strike_match.group(1)) if strike_match else None
         expiry_date, days_remaining = extract_expiry_data(description)
+        open_interest = parse_number(fields[24])
 
         if (
             base_price is None
@@ -1844,17 +1860,30 @@ def generate_market_expectations(use_saved_trade_value=False):
         breakeven_distance = (
             ((strike + option_last_price) / base_price) - 1
         ) * 100
+        monthly_return = (
+            breakeven_distance * 30 / days_remaining
+            if days_remaining > 0
+            else None
+        )
+        market_trade_value_share = (
+            trade_value / total_option_market_trade_value
+            if total_option_market_trade_value > 0
+            else 0
+        )
 
         group_key = (base_symbol, expiry_date, days_remaining)
         grouped.setdefault(group_key, []).append({
             "symbol": symbol,
             "days_remaining": days_remaining,
+            "open_interest": open_interest,
             "expiry_date": expiry_date,
             "trade_value": trade_value,
+            "market_trade_value_share": market_trade_value_share,
             "strike": strike,
             "option_last_price": option_last_price,
             "base_price": base_price,
             "breakeven_distance": breakeven_distance,
+            "monthly_return": monthly_return,
         })
 
     bases = {}
@@ -1893,8 +1922,16 @@ def generate_market_expectations(use_saved_trade_value=False):
         for item in option_rows:
             item["trade_value"] = round(item["trade_value"], 2)
             item["weight"] = round(item["weight"] * 100, 2)
+            item["market_trade_value_share"] = round(
+                item["market_trade_value_share"] * 100, 2
+            )
             item["breakeven_distance"] = round(
                 item["breakeven_distance"], 2
+            )
+            item["monthly_return"] = (
+                round(item["monthly_return"], 2)
+                if item["monthly_return"] is not None
+                else None
             )
 
         bases.setdefault(base_symbol, []).append({
@@ -1923,6 +1960,9 @@ def generate_market_expectations(use_saved_trade_value=False):
         "generated_at": now.isoformat(),
         "trade_value_source": "snapshot" if use_snapshot else "live",
         "snapshot_date": snapshot.get("date", "") if snapshot else "",
+        "total_option_market_trade_value": round(
+            total_option_market_trade_value, 2
+        ),
         "discovered_option_roots": sorted(discovered_roots),
         "bases": output,
     }

@@ -2943,9 +2943,23 @@ input[type="checkbox"] {
     gap: 8px;
 }
 
+.expectations-market-share-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .expectations-days-filter input {
     width: 145px;
     min-width: 145px;
+    height: 46px;
+    margin: 0;
+    text-align: center;
+}
+
+.expectations-market-share-filter input {
+    width: 125px;
+    min-width: 125px;
     height: 46px;
     margin: 0;
     text-align: center;
@@ -2958,7 +2972,8 @@ input[type="checkbox"] {
     font-weight: 800;
 }
 
-.expectations-days-filter button { margin: 0; white-space: nowrap; }
+.expectations-days-filter button,
+.expectations-market-share-filter button { margin: 0; white-space: nowrap; }
 
 .expectations-panel button:hover:not(:disabled),
 .expectations-modal button:hover:not(:disabled) {
@@ -3114,6 +3129,14 @@ input[type="checkbox"] {
     direction: rtl;
 }
 
+#expectations-modal .expectations-modal-card {
+    width: min(1500px, 98vw);
+}
+
+#expectations-modal .expectations-detail-table {
+    min-width: 1320px;
+}
+
 .expectations-modal-card > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .expectations-modal-card h3 { margin: 0; }
 .expectations-modal-close { min-width: 40px; margin: 0; padding: 5px 12px; font-size: 24px; }
@@ -3121,7 +3144,9 @@ input[type="checkbox"] {
 .expectations-modal-summary strong { color: #f8fafc; direction: ltr; unicode-bidi: isolate; }
 .expectations-modal-open { overflow: hidden; }
 .nearest-expiry-modal-card { width: min(1120px, 96vw); }
+.market-share-options-modal-card { width: min(1480px, 98vw); }
 .nearest-expiry-modal-card .expectations-detail-table-wrap { margin-top: 18px; }
+.market-share-options-modal-card .expectations-detail-table-wrap { margin-top: 18px; }
 .nearest-expiry-symbol { color: #e2e8f0; font-weight: 800; }
 .expectations-no-result { padding: 30px !important; color: var(--text-muted); text-align: center; }
 
@@ -3141,6 +3166,9 @@ input[type="checkbox"] {
     .expectations-days-filter { width: 100%; flex-direction: column; }
     .expectations-days-filter input,
     .expectations-days-filter button { width: 100%; min-width: 0; }
+    .expectations-market-share-filter { width: 100%; flex-direction: column; }
+    .expectations-market-share-filter input,
+    .expectations-market-share-filter button { width: 100%; min-width: 0; }
     .expectations-days-separator { display: none; }
 }
 

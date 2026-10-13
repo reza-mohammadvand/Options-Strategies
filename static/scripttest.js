@@ -2407,7 +2407,7 @@ function calculateSpreadTable() {
                                     ? formatSpreadNumber(
                                         buyTradeValue /
                                         1_000_000,
-                                        2
+                                        1
                                     )
                                     : "",
 
@@ -2438,7 +2438,7 @@ function calculateSpreadTable() {
                                     ? formatSpreadNumber(
                                         sellTradeValue /
                                         1_000_000,
-                                        2
+                                        1
                                     )
                                     : "",
 
@@ -4454,11 +4454,11 @@ function formatExpectationNumber(value, digits = 0) {
     });
 }
 
-function formatExpectationPercent(value) {
+function formatExpectationPercent(value, digits = 2) {
     if (value === null || value === undefined) {
         return "—";
     }
-    return `${formatExpectationNumber(value, 2)}٪`;
+    return `${formatExpectationNumber(value, digits)}٪`;
 }
 
 function renderMarketExpectations(payload) {
@@ -4468,12 +4468,18 @@ function renderMarketExpectations(payload) {
         return;
     }
 
+    const openBaseSymbols = new Set(
+        [...list.querySelectorAll(".expectations-base[open]")]
+            .map(item => item.dataset.baseSymbol)
+    );
     list.innerHTML = "";
     const bases = Array.isArray(payload?.bases) ? payload.bases : [];
     const summaryButton = document.getElementById("nearest-expiry-summary");
     if (summaryButton) summaryButton.disabled = bases.length === 0;
     const expiringButton = document.getElementById("show-expiring-options");
     if (expiringButton) expiringButton.disabled = bases.length === 0;
+    const marketShareButton = document.getElementById("show-market-share-options");
+    if (marketShareButton) marketShareButton.disabled = bases.length === 0;
     empty.hidden = bases.length > 0;
     list.hidden = bases.length === 0;
 
@@ -4481,6 +4487,7 @@ function renderMarketExpectations(payload) {
         const details = document.createElement("details");
         details.className = "expectations-base";
         details.dataset.baseSymbol = normalizeSymbol(base.base_symbol);
+        details.open = openBaseSymbols.has(details.dataset.baseSymbol);
 
         const summary = document.createElement("summary");
         summary.innerHTML = `<span>${base.base_symbol}</span><small>${formatExpectationNumber(base.groups.length)} سررسید</small>`;
@@ -4594,6 +4601,8 @@ async function loadMarketExpectations(force = false) {
     if (summaryButton) summaryButton.disabled = true;
     const expiringButton = document.getElementById("show-expiring-options");
     if (expiringButton) expiringButton.disabled = true;
+    const marketShareButton = document.getElementById("show-market-share-options");
+    if (marketShareButton) marketShareButton.disabled = true;
     if (loading) {
         loading.hidden = false;
         loading.textContent = "در حال دریافت و محاسبه اطلاعات...";
@@ -4783,6 +4792,59 @@ function closeExpiringOptionsSummary() {
     syncExpectationModalBodyState();
 }
 
+function openMarketShareOptionsSummary() {
+    const input = document.getElementById("expectations-market-share-count");
+    const requestedCount = Number(input?.value);
+    if (!Number.isInteger(requestedCount) || requestedCount <= 0) {
+        input?.setCustomValidity("تعداد باید یک عدد صحیح بزرگ‌تر از صفر باشد.");
+        input?.reportValidity();
+        return;
+    }
+
+    const modal = document.getElementById("market-share-options-modal");
+    const tbody = modal?.querySelector(".market-share-options-table tbody");
+    const bases = marketExpectationsData?.bases;
+    if (!modal || !tbody || !Array.isArray(bases)) return;
+
+    const options = bases.flatMap(base =>
+        (base.groups || []).flatMap(group =>
+            (group.options || []).map(option => ({
+                ...option,
+                base_symbol: base.base_symbol
+            }))
+        )
+    ).sort((first, second) =>
+        Number(second.market_trade_value_share || 0)
+        - Number(first.market_trade_value_share || 0)
+    ).slice(0, requestedCount);
+
+    document.getElementById("market-share-options-modal-title").textContent =
+        `${formatExpectationNumber(requestedCount)} نماد برتر از نظر سهم ارزش معاملات`;
+    tbody.innerHTML = options.length
+        ? options.map((option, index) => `
+            <tr>
+                <td data-sort-value="${index + 1}">${formatExpectationNumber(index + 1)}</td>
+                <td data-sort-value="${option.symbol || ""}">${option.symbol || "—"}</td>
+                <td data-sort-value="${option.base_symbol || ""}">${option.base_symbol || "—"}</td>
+                <td data-sort-value="${option.days_remaining ?? ""}">${formatExpectationNumber(option.days_remaining)}</td>
+                <td data-sort-value="${option.trade_value ?? ""}">${formatExpectationNumber(Number(option.trade_value) / 1_000_000, 1)}</td>
+                <td class="expectation-percent" data-sort-value="${option.market_trade_value_share ?? ""}">${formatExpectationPercent(option.market_trade_value_share, 4)}</td>
+                <td class="expectation-percent" data-sort-value="${option.breakeven_distance ?? ""}">${formatExpectationPercent(option.breakeven_distance)}</td>
+                <td class="expectation-percent" data-sort-value="${option.monthly_return ?? ""}">${formatExpectationPercent(option.monthly_return)}</td>
+            </tr>`).join("")
+        : `<tr><td colspan="8" class="expectations-no-result">اطلاعاتی برای نمایش وجود ندارد.</td></tr>`;
+
+    resetExpectationSummarySort(modal.querySelector(".market-share-options-table"));
+    modal.hidden = false;
+    document.body.classList.add("expectations-modal-open");
+}
+
+function closeMarketShareOptionsSummary() {
+    const modal = document.getElementById("market-share-options-modal");
+    if (modal) modal.hidden = true;
+    syncExpectationModalBodyState();
+}
+
 function resetExpectationSummarySort(table) {
     if (!table) return;
     table.dataset.sortColumn = "";
@@ -4851,15 +4913,17 @@ function openExpectationDetails(baseIndex, groupId) {
         <span>میانگین وزنی: <strong>${formatExpectationPercent(group.weighted_average)}</strong></span>
         <span>مینیمم: <strong>${formatExpectationPercent(group.minimum)}</strong></span>
         <span>ماکسیمم: <strong>${formatExpectationPercent(group.maximum)}</strong></span>
-        <span>ارزش کل (میلیون ریال): <strong>${formatExpectationNumber(group.total_trade_value / 1_000_000, 2)}</strong></span>`;
+        <span>ارزش کل (میلیون ریال): <strong>${formatExpectationNumber(group.total_trade_value / 1_000_000, 1)}</strong></span>`;
 
     const table = modal.querySelector(".expectations-detail-table");
     table.querySelector("thead").innerHTML = `<tr>
         <th data-sort-key="symbol" tabindex="0">نماد اختیار خرید <span class="expectations-sort-indicator"></span></th>
         <th data-sort-key="days_remaining" tabindex="0">روز تا سررسید <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="open_interest" tabindex="0">تعداد موقعیت باز <span class="expectations-sort-indicator"></span></th>
         <th data-sort-key="trade_value" tabindex="0">ارزش معاملات (میلیون ریال) <span class="expectations-sort-indicator"></span></th>
         <th data-sort-key="weight" tabindex="0">وزن نسبت به کل <span class="expectations-sort-indicator"></span></th>
         <th data-sort-key="breakeven_distance" tabindex="0">فاصله تا سر‌به‌سر <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="monthly_return" tabindex="0">بازدهی ماهیانه <span class="expectations-sort-indicator"></span></th>
         <th data-sort-key="strike" tabindex="0">قیمت اعمال <span class="expectations-sort-indicator"></span></th>
         <th data-sort-key="option_last_price" tabindex="0">آخرین قیمت اختیار <span class="expectations-sort-indicator"></span></th>
     </tr>`;
@@ -4906,9 +4970,11 @@ function renderExpectationDetailRows() {
         <tr>
             <td>${option.symbol}</td>
             <td>${formatExpectationNumber(option.days_remaining)}</td>
-            <td>${formatExpectationNumber(option.trade_value / 1_000_000, 2)}</td>
+            <td>${formatExpectationNumber(option.open_interest)}</td>
+            <td>${formatExpectationNumber(option.trade_value / 1_000_000, 1)}</td>
             <td class="expectation-percent">${formatExpectationPercent(option.weight)}</td>
             <td class="expectation-percent">${formatExpectationPercent(option.breakeven_distance)}</td>
+            <td class="expectation-percent">${formatExpectationPercent(option.monthly_return)}</td>
             <td>${formatExpectationNumber(option.strike)}</td>
             <td>${formatExpectationNumber(option.option_last_price)}</td>
         </tr>`).join("");
@@ -4992,6 +5058,16 @@ document.addEventListener(
             ?.addEventListener("click", openExpiringOptionsSummary);
 
         document
+            .getElementById("show-market-share-options")
+            ?.addEventListener("click", openMarketShareOptionsSummary);
+
+        document
+            .getElementById("expectations-market-share-count")
+            ?.addEventListener("input", event => {
+                event.target.setCustomValidity("");
+            });
+
+        document
             .getElementById("expectations-max-days")
             ?.addEventListener("input", event => {
                 event.target.setCustomValidity("");
@@ -5046,6 +5122,12 @@ document.addEventListener(
             .querySelectorAll("[data-close-expiring-options-modal]")
             .forEach(element => element.addEventListener(
                 "click", closeExpiringOptionsSummary
+            ));
+
+        document
+            .querySelectorAll("[data-close-market-share-options-modal]")
+            .forEach(element => element.addEventListener(
+                "click", closeMarketShareOptionsSummary
             ));
 
         document
@@ -5115,6 +5197,7 @@ document.addEventListener(
                 }
                 closeNearestExpirySummary();
                 closeExpiringOptionsSummary();
+                closeMarketShareOptionsSummary();
             }
         });
     }
