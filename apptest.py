@@ -88,6 +88,84 @@ mapping = {
     for option_symbol, base_symbol in mapping.items()
 }
 
+
+def is_option_description(description, option_type=None):
+    text = normalize_symbol(description)
+    if option_type == "call":
+        return text.startswith("اختیارخ")
+    if option_type == "put":
+        return text.startswith("اختیارف")
+    return text.startswith("اختیارخ") or text.startswith("اختیارف")
+
+
+def extract_option_base_label(description):
+    """Extract the underlying label from a TSETMC option description."""
+    text = str(description or "").strip().translate(
+        str.maketrans({"ي": "ی", "ى": "ی", "ك": "ک"})
+    )
+    match = re.search(
+        r"^اختیار[خف]\s+(.+?)-[\d,.]+-(?:\d{2,4}/\d{2}/\d{2}|\d{6,8})",
+        text,
+    )
+    return match.group(1).strip() if match else ""
+
+
+def option_symbol_root(symbol):
+    return normalize_symbol(re.sub(r"\d+$", "", str(symbol or "")))
+
+
+def build_dynamic_option_mapping(rows):
+    """Merge the legacy map with underlyings discovered from live descriptions."""
+    discovered = dict(mapping)
+    market_symbols = {}
+
+    for row in rows:
+        fields = row.split(",")
+        if len(fields) < 4:
+            continue
+        symbol = normalize_symbol(fields[2])
+        if symbol and not is_option_description(fields[3]):
+            market_symbols[symbol] = symbol
+
+    comparable_symbols = {
+        re.sub(r"[^\w\u0600-\u06ff]", "", symbol): symbol
+        for symbol in market_symbols
+    }
+
+    for row in rows:
+        fields = row.split(",")
+        if len(fields) < 4 or not is_option_description(fields[3]):
+            continue
+
+        root = option_symbol_root(fields[2])
+        if not root or root in discovered:
+            continue
+
+        label = extract_option_base_label(fields[3])
+        normalized_label = normalize_symbol(label)
+        comparable_label = re.sub(
+            r"[^\w\u0600-\u06ff]", "", normalized_label
+        )
+
+        base_symbol = market_symbols.get(normalized_label)
+        if not base_symbol:
+            base_symbol = comparable_symbols.get(comparable_label)
+
+        if not base_symbol and len(comparable_label) >= 3:
+            candidates = [
+                symbol
+                for comparable, symbol in comparable_symbols.items()
+                if comparable.startswith(comparable_label)
+                or comparable_label.startswith(comparable)
+            ]
+            if len(candidates) == 1:
+                base_symbol = candidates[0]
+
+        if base_symbol:
+            discovered[root] = base_symbol
+
+    return discovered
+
 def get_best_limits(ins_code):
     """
     دریافت BestLimits نماد.
@@ -329,12 +407,10 @@ def collect_trade_values(rows):
 
         ins_code = fields[0].strip()
         symbol = fields[2].strip()
+        description = fields[3].strip()
 
-        # برای تب مارکت، ارزش معاملات هر دو نوع اختیار ذخیره می‌شود.
-        if not (
-            symbol.startswith("ض")
-            or symbol.startswith("ط")
-        ):
+        # تشخیص اختیار از شرح رسمی، نه صرفاً حرف اول نماد.
+        if not is_option_description(description):
             continue
 
         trade_value = parse_number(
@@ -892,11 +968,19 @@ def extract_expiry_data(desc):
     days_remaining = None
 
     pattern_slash = re.search(r'\d{4}/\d{2}/\d{2}', desc)
+    pattern_short_slash = re.search(r'(?<!\d)(\d{2})/(\d{2})/(\d{2})(?!\d)', desc)
     pattern8 = re.search(r'-(\d{8})', desc)
     pattern6 = re.search(r'-(\d{6})', desc)
 
     if pattern_slash:
         expire_date = pattern_slash.group(0)
+
+    elif pattern_short_slash:
+        expire_date = (
+            f"{1400 + int(pattern_short_slash.group(1))}/"
+            f"{pattern_short_slash.group(2)}/"
+            f"{pattern_short_slash.group(3)}"
+        )
 
     elif pattern8:
         raw = pattern8.group(1)
@@ -964,6 +1048,7 @@ def generate_spread_data(
         return []
 
     rows = response.text.strip().split(";")
+    option_mapping = build_dynamic_option_mapping(rows)
 
     # =========================================================
     # TRADE VALUE MODE
@@ -1156,14 +1241,14 @@ def generate_spread_data(
             strike = parse_number(strike_match.group(1))
 
         # فقط اختیار خرید
-        if not symbol.startswith("ض"):
+        if not is_option_description(desc, "call"):
             continue
 
         # حذف اعداد انتهای نماد، مانند ضهرم1234 ← ضهرم
         clean_symbol = normalize_symbol(re.sub(r'\d+', '', symbol))
 
         # پیدا کردن نماد پایه از mapping
-        option_base_symbol = mapping.get(clean_symbol)
+        option_base_symbol = option_mapping.get(clean_symbol)
 
         if not option_base_symbol:
             continue
@@ -1508,6 +1593,7 @@ def generate_data(use_saved_trade_value=False):
         r = requests.get(url)
         r.encoding = "utf-8"
         rows = r.text.strip().split(';')
+        option_mapping = build_dynamic_option_mapping(rows)
 
         if not use_saved_trade_value:
             save_trade_value_snapshot(
@@ -1535,11 +1621,11 @@ def generate_data(use_saved_trade_value=False):
             ins_code = f[0].strip()
             #buy_price, buy_vol, sell_price, sell_vol = get_best_limits(ins_code)
 
-            if not (symbol.startswith("ط") or symbol.startswith("ض")):
+            if not is_option_description(desc):
                 continue
 
             base_key = normalize_symbol(re.sub(r'\d+', '', symbol))
-            base_symbol = mapping.get(base_key, "")
+            base_symbol = option_mapping.get(base_key, "")
             base_price = market_data.get(base_symbol, "")
 
             if not base_price.isdigit():
@@ -1604,7 +1690,7 @@ def generate_data(use_saved_trade_value=False):
             leverage = round(base_price / last_price, 2) if last_price > 0 else ""
 
             if base_price > 0 and strike != "":
-                is_call = symbol.startswith("ض")
+                is_call = is_option_description(desc, "call")
 
                 breakeven_calc = (strike + last_price) if is_call else (strike - last_price)
 
@@ -1612,7 +1698,7 @@ def generate_data(use_saved_trade_value=False):
             else:
                 intrinsic_diff = ""
 
-            if symbol.startswith("ض"):
+            if is_option_description(desc, "call"):
                 breakeven = round(strike + last_price, 2)
             else:
                 breakeven = round(strike - last_price, 2)
@@ -1621,7 +1707,7 @@ def generate_data(use_saved_trade_value=False):
 
             # status
             if strike != "":
-                if symbol.startswith("ض"):
+                if is_option_description(desc, "call"):
                     status = "ITM" if base_price > strike else ("OTM" if base_price < strike else "ATM")
                 else:
                     status = "OTM" if base_price > strike else ("ITM" if base_price < strike else "ATM")
@@ -1667,6 +1753,230 @@ def generate_data(use_saved_trade_value=False):
         time.sleep(2)
 
     return []
+
+
+def fetch_market_watch_rows():
+    response = requests.get(
+        "https://old.tsetmc.com/tsev2/data/MarketWatchPlus.aspx",
+        timeout=15,
+    )
+    response.raise_for_status()
+    response.encoding = "utf-8"
+    return response.text.strip().split(";")
+
+
+def generate_market_expectations(use_saved_trade_value=False):
+    """Build non-visual option rows and expiry-level expectation summaries."""
+    try:
+        rows = fetch_market_watch_rows()
+    except requests.RequestException as error:
+        raise RuntimeError("دریافت اطلاعات بازار برای انتظارات بازار ناموفق بود.") from error
+
+    option_mapping = build_dynamic_option_mapping(rows)
+    market_prices = {}
+
+    for row in rows:
+        fields = row.split(",")
+        if len(fields) < 25:
+            continue
+        price = parse_number(fields[7])
+        if price is not None:
+            market_prices[normalize_symbol(fields[2])] = price
+
+    now = get_iran_now()
+    should_use_snapshot = use_saved_trade_value or now.hour < 9
+    snapshot = load_trade_value_snapshot() if should_use_snapshot else None
+    snapshot_values = snapshot.get("values", {}) if snapshot else {}
+    use_snapshot = bool(snapshot_values)
+
+    if use_saved_trade_value and not use_snapshot:
+        raise RuntimeError(
+            "فایل ارزش معاملات ذخیره‌شده وجود ندارد یا خالی است."
+        )
+
+    if not use_snapshot:
+        save_trade_value_snapshot(collect_trade_values(rows))
+
+    grouped = {}
+    discovered_roots = set()
+
+    for row in rows:
+        fields = row.split(",")
+        if len(fields) < 25:
+            continue
+
+        ins_code = fields[0].strip()
+        symbol = fields[2].strip()
+        description = fields[3].strip()
+
+        if not is_option_description(description, "call"):
+            continue
+
+        root = option_symbol_root(symbol)
+        base_symbol = option_mapping.get(root)
+        if not base_symbol:
+            continue
+
+        discovered_roots.add(root)
+        base_price = market_prices.get(base_symbol)
+        option_last_price = parse_number(fields[7])
+        strike_match = re.search(r"-([\d,.]+)-", description)
+        strike = parse_number(strike_match.group(1)) if strike_match else None
+        expiry_date, days_remaining = extract_expiry_data(description)
+
+        if (
+            base_price is None
+            or base_price <= 0
+            or option_last_price is None
+            or strike is None
+            or days_remaining is None
+        ):
+            continue
+
+        if use_snapshot:
+            trade_value = get_saved_trade_value(
+                snapshot_values, ins_code, symbol
+            )
+        else:
+            trade_value = parse_number(fields[10])
+
+        trade_value = trade_value if trade_value is not None else 0
+        breakeven_distance = (
+            ((strike + option_last_price) / base_price) - 1
+        ) * 100
+
+        group_key = (base_symbol, expiry_date, days_remaining)
+        grouped.setdefault(group_key, []).append({
+            "symbol": symbol,
+            "days_remaining": days_remaining,
+            "expiry_date": expiry_date,
+            "trade_value": trade_value,
+            "strike": strike,
+            "option_last_price": option_last_price,
+            "base_price": base_price,
+            "breakeven_distance": breakeven_distance,
+        })
+
+    bases = {}
+
+    for (base_symbol, expiry_date, days_remaining), option_rows in grouped.items():
+        total_trade_value = sum(item["trade_value"] for item in option_rows)
+
+        for item in option_rows:
+            item["weight"] = (
+                item["trade_value"] / total_trade_value
+                if total_trade_value > 0
+                else 0
+            )
+
+        weighted_average = (
+            sum(
+                item["weight"] * item["breakeven_distance"]
+                for item in option_rows
+            )
+            if total_trade_value > 0
+            else None
+        )
+        meaningful_rows = [
+            item for item in option_rows if item["weight"] > 0.05
+        ]
+        minimum = (
+            min(item["breakeven_distance"] for item in meaningful_rows)
+            if meaningful_rows else None
+        )
+        maximum = (
+            max(item["breakeven_distance"] for item in meaningful_rows)
+            if meaningful_rows else None
+        )
+
+        option_rows.sort(key=lambda item: (item["strike"], item["symbol"]))
+        for item in option_rows:
+            item["trade_value"] = round(item["trade_value"], 2)
+            item["weight"] = round(item["weight"] * 100, 2)
+            item["breakeven_distance"] = round(
+                item["breakeven_distance"], 2
+            )
+
+        bases.setdefault(base_symbol, []).append({
+            "group_id": f"{base_symbol}-{expiry_date}",
+            "days_remaining": days_remaining,
+            "expiry_date": expiry_date,
+            "total_trade_value": round(total_trade_value, 2),
+            "weighted_average": (
+                round(weighted_average, 2)
+                if weighted_average is not None else None
+            ),
+            "minimum": round(minimum, 2) if minimum is not None else None,
+            "maximum": round(maximum, 2) if maximum is not None else None,
+            "options": option_rows,
+        })
+
+    output = []
+    for base_symbol in sorted(bases):
+        groups = sorted(
+            bases[base_symbol],
+            key=lambda item: (item["days_remaining"], item["expiry_date"]),
+        )
+        output.append({"base_symbol": base_symbol, "groups": groups})
+
+    return {
+        "generated_at": now.isoformat(),
+        "trade_value_source": "snapshot" if use_snapshot else "live",
+        "snapshot_date": snapshot.get("date", "") if snapshot else "",
+        "discovered_option_roots": sorted(discovered_roots),
+        "bases": output,
+    }
+
+
+@app.route("/option-bases")
+def get_option_bases():
+    try:
+        rows = fetch_market_watch_rows()
+        option_mapping = build_dynamic_option_mapping(rows)
+        active_roots = {
+            option_symbol_root(fields[2])
+            for row in rows
+            if len(fields := row.split(",")) >= 4
+            and is_option_description(fields[3])
+        }
+        bases = sorted({
+            option_mapping[root]
+            for root in active_roots
+            if root in option_mapping
+        })
+        return jsonify({
+            "bases": bases,
+            "mapping": {
+                root: option_mapping[root]
+                for root in active_roots
+                if root in option_mapping
+            },
+        })
+    except requests.RequestException:
+        return jsonify({"bases": sorted(set(mapping.values()))})
+
+
+@app.route("/market-expectations")
+def get_market_expectations():
+    use_saved_trade_value = request.args.get(
+        "use_saved_value", default="0", type=str
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
+    try:
+        return Response(
+            json.dumps(
+                generate_market_expectations(use_saved_trade_value),
+                ensure_ascii=False,
+            ),
+            content_type="application/json; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+    except RuntimeError as error:
+        return Response(
+            json.dumps({"error": str(error)}, ensure_ascii=False),
+            status=400,
+            content_type="application/json; charset=utf-8",
+        )
 
 
 @app.route("/")

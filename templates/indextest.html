@@ -17,6 +17,7 @@
 
     <button class="tab-btn active" data-tab="market">Market</button>
     <button class="tab-btn" data-tab="spread">Bull Spread</button>
+    <button class="tab-btn" data-tab="expectations">Market Expectations</button>
 </div>
 
 <div id="market" class="tab-content active">
@@ -608,6 +609,56 @@
     </div>
 
 
+</div>
+
+<div id="expectations" class="tab-content">
+    <section class="expectations-panel">
+        <header class="expectations-header">
+            <h2>Market Expectations</h2>
+            <button id="refresh-expectations" type="button">به‌روزرسانی</button>
+        </header>
+
+        <div class="expectations-toolbar">
+            <label class="expectations-search-box" for="expectations-search">
+                <span aria-hidden="true">⌕</span>
+                <input
+                    id="expectations-search"
+                    type="search"
+                    placeholder="جست‌وجوی نماد پایه..."
+                    autocomplete="off"
+                >
+            </label>
+
+            <label class="expectations-saved-toggle" for="expectations-use-saved-value">
+                <input id="expectations-use-saved-value" type="checkbox">
+                <span class="expectations-toggle-track" aria-hidden="true">
+                    <span class="expectations-toggle-thumb"></span>
+                </span>
+                <span>استفاده از ارزش معاملات ذخیره‌شده دیروز</span>
+            </label>
+        </div>
+
+        <div id="expectations-loading" class="expectations-state">در حال دریافت و محاسبه اطلاعات...</div>
+        <div id="expectations-list" class="expectations-list" hidden></div>
+        <div id="expectations-empty" class="expectations-state" hidden>اطلاعاتی برای نمایش وجود ندارد.</div>
+    </section>
+</div>
+
+<div id="expectations-modal" class="expectations-modal" hidden>
+    <div class="expectations-modal-backdrop" data-close-expectations-modal></div>
+    <section class="expectations-modal-card" role="dialog" aria-modal="true" aria-labelledby="expectations-modal-title">
+        <header>
+            <h3 id="expectations-modal-title">جزئیات محاسبات</h3>
+            <button type="button" class="expectations-modal-close" data-close-expectations-modal aria-label="بستن">×</button>
+        </header>
+        <div id="expectations-modal-summary" class="expectations-modal-summary"></div>
+        <div class="expectations-detail-table-wrap">
+            <table class="expectations-table expectations-detail-table">
+                <thead></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </section>
 </div>
 
 <script src="{{ url_for('static', filename='scripttest.js') }}"></script>

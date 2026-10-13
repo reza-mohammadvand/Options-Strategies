@@ -90,6 +90,13 @@ const mapping = Object.fromEntries(
     ])
 );
 
+let discoveredBaseSymbols = [];
+let marketExpectationsData = null;
+let marketExpectationsLoading = false;
+let marketExpectationsRefreshTimer = null;
+let expectationDetailRows = [];
+let expectationDetailSort = { key: null, direction: "asc" };
+
 async function loadData() {
 
     try {
@@ -685,8 +692,10 @@ function initializeCheckDropdown(dropdown) {
 
 function populateBaseSymbolDropdown() {
 
-    const baseSymbols =
-        Object.values(mapping);
+    const baseSymbols = [
+        ...Object.values(mapping),
+        ...discoveredBaseSymbols
+    ];
 
     const uniqueSymbols = [
         ...new Set(baseSymbols)
@@ -1581,6 +1590,10 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
         // پیدا کردن تب مربوطه
         const tabId = this.dataset.tab;
         document.getElementById(tabId).classList.add("active");
+
+        if (tabId === "expectations" && !marketExpectationsData) {
+            loadMarketExpectations();
+        }
     });
 
 });
@@ -4407,6 +4420,340 @@ function resetSpreadCalculationTable() {
     }
 }
 
+async function loadDiscoveredOptionBases() {
+    try {
+        const response = await fetch(`/option-bases?_ts=${Date.now()}`, {
+            cache: "no-store"
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            return;
+        }
+
+        discoveredBaseSymbols = Array.isArray(result.bases)
+            ? result.bases.map(normalizeSymbol)
+            : [];
+
+        if (result.mapping && typeof result.mapping === "object") {
+            Object.entries(result.mapping).forEach(([root, base]) => {
+                mapping[normalizeSymbol(root)] = normalizeSymbol(base);
+            });
+        }
+    } catch (error) {
+        console.error("Option base discovery error:", error);
+    }
+}
+
+function formatExpectationNumber(value, digits = 0) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return "—";
+    }
+    return Number(value).toLocaleString("fa-IR", {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits
+    });
+}
+
+function formatExpectationPercent(value) {
+    if (value === null || value === undefined) {
+        return "—";
+    }
+    return `${formatExpectationNumber(value, 2)}٪`;
+}
+
+function renderMarketExpectations(payload) {
+    const list = document.getElementById("expectations-list");
+    const empty = document.getElementById("expectations-empty");
+    if (!list || !empty) {
+        return;
+    }
+
+    list.innerHTML = "";
+    const bases = Array.isArray(payload?.bases) ? payload.bases : [];
+    empty.hidden = bases.length > 0;
+    list.hidden = bases.length === 0;
+
+    bases.forEach((base, baseIndex) => {
+        const details = document.createElement("details");
+        details.className = "expectations-base";
+        details.dataset.baseSymbol = normalizeSymbol(base.base_symbol);
+
+        const summary = document.createElement("summary");
+        summary.innerHTML = `<span>${base.base_symbol}</span><small>${formatExpectationNumber(base.groups.length)} سررسید</small>`;
+        details.appendChild(summary);
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "expectations-table-wrap";
+        const table = document.createElement("table");
+        table.className = "expectations-table";
+        table.innerHTML = `
+            <thead><tr>
+                <th>روز تا سررسید</th>
+                <th>تاریخ سررسید</th>
+                <th>مینیمم فاصله تا سر‌به‌سر</th>
+                <th>ماکسیمم فاصله تا سر‌به‌سر</th>
+                <th>میانگین وزنی</th>
+                <th>جزئیات</th>
+            </tr></thead>
+            <tbody></tbody>`;
+
+        const tbody = table.querySelector("tbody");
+        base.groups.forEach(group => {
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>${formatExpectationNumber(group.days_remaining)}</td>
+                <td>${group.expiry_date || "—"}</td>
+                <td class="expectation-percent">${formatExpectationPercent(group.minimum)}</td>
+                <td class="expectation-percent">${formatExpectationPercent(group.maximum)}</td>
+                <td class="expectation-percent expectation-weighted">${formatExpectationPercent(group.weighted_average)}</td>
+                <td><button type="button" class="expectations-detail-link" data-base-index="${baseIndex}" data-group-id="${group.group_id}">مشاهده محاسبات</button></td>`;
+            tbody.appendChild(row);
+        });
+
+        wrapper.appendChild(table);
+        details.appendChild(wrapper);
+        list.appendChild(details);
+        initializeExpectationAccordion(details, summary, wrapper);
+    });
+
+    filterMarketExpectationSymbols(
+        document.getElementById("expectations-search")?.value || ""
+    );
+}
+
+function filterMarketExpectationSymbols(searchValue) {
+    const query = normalizeSymbol(searchValue).toLocaleLowerCase("fa");
+    let visibleCount = 0;
+
+    document.querySelectorAll(".expectations-base").forEach(item => {
+        const symbol = (item.dataset.baseSymbol || "").toLocaleLowerCase("fa");
+        const visible = !query || symbol.includes(query);
+        item.hidden = !visible;
+        if (visible) visibleCount += 1;
+    });
+
+    const empty = document.getElementById("expectations-empty");
+    const list = document.getElementById("expectations-list");
+    if (empty && list && marketExpectationsData?.bases?.length) {
+        empty.hidden = visibleCount > 0;
+        empty.textContent = visibleCount > 0
+            ? ""
+            : "نمادی مطابق عبارت جست‌وجو پیدا نشد.";
+    }
+}
+
+function initializeExpectationAccordion(details, summary, content) {
+    summary.addEventListener("click", event => {
+        event.preventDefault();
+        if (details.dataset.animating === "true") return;
+
+        details.dataset.animating = "true";
+        const isOpen = details.open;
+
+        if (!isOpen) {
+            details.open = true;
+        }
+
+        const animation = content.animate(
+            isOpen
+                ? [
+                    { height: `${content.scrollHeight}px`, opacity: 1 },
+                    { height: "0px", opacity: 0 }
+                ]
+                : [
+                    { height: "0px", opacity: 0 },
+                    { height: `${content.scrollHeight}px`, opacity: 1 }
+                ],
+            { duration: 280, easing: "cubic-bezier(.22,.8,.3,1)" }
+        );
+
+        animation.onfinish = () => {
+            if (isOpen) details.open = false;
+            content.style.height = "";
+            content.style.opacity = "";
+            details.dataset.animating = "false";
+        };
+        animation.oncancel = animation.onfinish;
+    });
+}
+
+async function loadMarketExpectations(force = false) {
+    if (marketExpectationsLoading || (marketExpectationsData && !force)) {
+        return;
+    }
+
+    const loading = document.getElementById("expectations-loading");
+    const list = document.getElementById("expectations-list");
+    const empty = document.getElementById("expectations-empty");
+    marketExpectationsLoading = true;
+    if (loading) {
+        loading.hidden = false;
+        loading.textContent = "در حال دریافت و محاسبه اطلاعات...";
+    }
+    if (list) list.hidden = true;
+    if (empty) empty.hidden = true;
+
+    try {
+        const useSavedValue = document
+            .getElementById("expectations-use-saved-value")
+            ?.checked === true;
+        const parameters = new URLSearchParams({
+            use_saved_value: useSavedValue ? "1" : "0",
+            _ts: Date.now().toString()
+        });
+        const response = await fetch(`/market-expectations?${parameters.toString()}`, {
+            cache: "no-store"
+        });
+        const responseText = await response.text();
+        let result;
+
+        try {
+            result = JSON.parse(responseText);
+        } catch (parseError) {
+            throw new Error(
+                response.status === 404
+                    ? "مسیر انتظارات بازار روی سرور فعال نیست؛ برنامه پایتون را متوقف و دوباره اجرا کنید."
+                    : "سرور به‌جای JSON پاسخ نامعتبر برگرداند. لطفاً برنامه پایتون را مجدداً اجرا کنید."
+            );
+        }
+        if (!response.ok) {
+            throw new Error(result.error || "دریافت اطلاعات ناموفق بود.");
+        }
+        marketExpectationsData = result;
+        renderMarketExpectations(result);
+        if (loading) loading.hidden = true;
+    } catch (error) {
+        if (loading) {
+            loading.hidden = false;
+            loading.textContent = error.message || "دریافت اطلاعات ناموفق بود.";
+        }
+    } finally {
+        marketExpectationsLoading = false;
+    }
+}
+
+function startMarketExpectationsAutoRefresh() {
+    if (marketExpectationsRefreshTimer) {
+        clearInterval(marketExpectationsRefreshTimer);
+    }
+
+    marketExpectationsRefreshTimer = setInterval(() => {
+        if (isTabActive("expectations")) {
+            loadMarketExpectations(true);
+        }
+    }, 60_000);
+}
+
+function openExpectationDetails(baseIndex, groupId) {
+    const base = marketExpectationsData?.bases?.[baseIndex];
+    const group = base?.groups?.find(item => item.group_id === groupId);
+    const modal = document.getElementById("expectations-modal");
+    if (!base || !group || !modal) {
+        return;
+    }
+
+    document.getElementById("expectations-modal-title").textContent =
+        `${base.base_symbol} — ${group.days_remaining} روز تا سررسید`;
+    document.getElementById("expectations-modal-summary").innerHTML = `
+        <span>میانگین وزنی: <strong>${formatExpectationPercent(group.weighted_average)}</strong></span>
+        <span>مینیمم: <strong>${formatExpectationPercent(group.minimum)}</strong></span>
+        <span>ماکسیمم: <strong>${formatExpectationPercent(group.maximum)}</strong></span>
+        <span>ارزش کل (میلیون ریال): <strong>${formatExpectationNumber(group.total_trade_value / 1_000_000, 2)}</strong></span>`;
+
+    const table = modal.querySelector(".expectations-detail-table");
+    table.querySelector("thead").innerHTML = `<tr>
+        <th data-sort-key="symbol" tabindex="0">نماد اختیار خرید <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="days_remaining" tabindex="0">روز تا سررسید <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="trade_value" tabindex="0">ارزش معاملات (میلیون ریال) <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="weight" tabindex="0">وزن نسبت به کل <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="breakeven_distance" tabindex="0">فاصله تا سر‌به‌سر <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="strike" tabindex="0">قیمت اعمال <span class="expectations-sort-indicator"></span></th>
+        <th data-sort-key="option_last_price" tabindex="0">آخرین قیمت اختیار <span class="expectations-sort-indicator"></span></th>
+    </tr>`;
+
+    expectationDetailRows = Array.isArray(group.options)
+        ? [...group.options]
+        : [];
+    expectationDetailSort = { key: null, direction: "asc" };
+    renderExpectationDetailRows();
+
+    modal.hidden = false;
+    document.body.classList.add("expectations-modal-open");
+}
+
+function renderExpectationDetailRows() {
+    const table = document.querySelector(".expectations-detail-table");
+    const tbody = table?.querySelector("tbody");
+    if (!table || !tbody) return;
+
+    const rows = [...expectationDetailRows];
+    const { key, direction } = expectationDetailSort;
+
+    if (key) {
+        rows.sort((first, second) => {
+            const firstValue = first[key];
+            const secondValue = second[key];
+            let comparison;
+
+            if (typeof firstValue === "number" && typeof secondValue === "number") {
+                comparison = firstValue - secondValue;
+            } else {
+                comparison = String(firstValue ?? "").localeCompare(
+                    String(secondValue ?? ""),
+                    "fa",
+                    { numeric: true, sensitivity: "base" }
+                );
+            }
+
+            return direction === "asc" ? comparison : -comparison;
+        });
+    }
+
+    tbody.innerHTML = rows.map(option => `
+        <tr>
+            <td>${option.symbol}</td>
+            <td>${formatExpectationNumber(option.days_remaining)}</td>
+            <td>${formatExpectationNumber(option.trade_value / 1_000_000, 2)}</td>
+            <td class="expectation-percent">${formatExpectationPercent(option.weight)}</td>
+            <td class="expectation-percent">${formatExpectationPercent(option.breakeven_distance)}</td>
+            <td>${formatExpectationNumber(option.strike)}</td>
+            <td>${formatExpectationNumber(option.option_last_price)}</td>
+        </tr>`).join("");
+
+    table.querySelectorAll("th[data-sort-key]").forEach(header => {
+        const active = header.dataset.sortKey === key;
+        header.setAttribute(
+            "aria-sort",
+            active
+                ? (direction === "asc" ? "ascending" : "descending")
+                : "none"
+        );
+        const indicator = header.querySelector(".expectations-sort-indicator");
+        if (indicator) {
+            indicator.textContent = active
+                ? (direction === "asc" ? "▲" : "▼")
+                : "↕";
+        }
+    });
+}
+
+function sortExpectationDetails(sortKey) {
+    expectationDetailSort = {
+        key: sortKey,
+        direction: expectationDetailSort.key === sortKey
+            && expectationDetailSort.direction === "asc"
+            ? "desc"
+            : "asc"
+    };
+    renderExpectationDetailRows();
+}
+
+function closeExpectationDetails() {
+    const modal = document.getElementById("expectations-modal");
+    if (modal) modal.hidden = true;
+    document.body.classList.remove("expectations-modal-open");
+}
+
 document.addEventListener(
     "DOMContentLoaded",
     async function () {
@@ -4414,6 +4761,7 @@ document.addEventListener(
         /*
             ساخت Dropdown نمادها
         */
+        await loadDiscoveredOptionBases();
         populateBaseSymbolDropdown();
         initializeDataSourceDropdown(
             document.getElementById("market-data-source")
@@ -4436,6 +4784,62 @@ document.addEventListener(
             شروع بروزرسانی 30 ثانیه‌ای
         */
         startAutoRefresh();
+        startMarketExpectationsAutoRefresh();
+
+        document
+            .getElementById("refresh-expectations")
+            ?.addEventListener("click", () => loadMarketExpectations(true));
+
+        document
+            .getElementById("expectations-search")
+            ?.addEventListener("input", event => {
+                filterMarketExpectationSymbols(event.target.value);
+            });
+
+        document
+            .getElementById("expectations-use-saved-value")
+            ?.addEventListener("change", () => {
+                marketExpectationsData = null;
+                loadMarketExpectations(true);
+            });
+
+        document
+            .getElementById("expectations-list")
+            ?.addEventListener("click", event => {
+                const button = event.target.closest(".expectations-detail-link");
+                if (!button) return;
+                openExpectationDetails(
+                    Number(button.dataset.baseIndex),
+                    button.dataset.groupId
+                );
+            });
+
+        document
+            .querySelectorAll("[data-close-expectations-modal]")
+            .forEach(element => element.addEventListener(
+                "click", closeExpectationDetails
+            ));
+
+        document
+            .querySelector(".expectations-detail-table thead")
+            ?.addEventListener("click", event => {
+                const header = event.target.closest("th[data-sort-key]");
+                if (header) sortExpectationDetails(header.dataset.sortKey);
+            });
+
+        document
+            .querySelector(".expectations-detail-table thead")
+            ?.addEventListener("keydown", event => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                const header = event.target.closest("th[data-sort-key]");
+                if (!header) return;
+                event.preventDefault();
+                sortExpectationDetails(header.dataset.sortKey);
+            });
+
+        document.addEventListener("keydown", event => {
+            if (event.key === "Escape") closeExpectationDetails();
+        });
     }
 );
 
