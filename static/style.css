@@ -1229,6 +1229,21 @@ table td[colspan] {
     }
 }
 
+@media (min-width: 651px) and (max-width: 1100px) {
+    .expectations-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .expectations-header-actions {
+        position: static;
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        margin-top: 12px;
+    }
+}
+
 
 /* ================= REDUCED MOTION ================= */
 @media (prefers-reduced-motion: reduce) {
@@ -2761,10 +2776,26 @@ input[type="checkbox"] {
     border-bottom: 1px solid rgba(125, 211, 252, 0.13);
 }
 
-.expectations-header > button {
+.expectations-header-actions {
     position: absolute;
     left: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.expectations-header-actions > button {
     margin: 0;
+}
+
+#nearest-expiry-summary {
+    border-color: rgba(167, 139, 250, 0.35);
+    background: linear-gradient(145deg, rgba(76, 29, 149, 0.48), rgba(30, 41, 59, 0.8));
+}
+
+#nearest-expiry-summary:hover {
+    border-color: rgba(196, 181, 253, 0.62);
+    background: linear-gradient(145deg, rgba(91, 33, 182, 0.58), rgba(30, 41, 59, 0.88));
 }
 
 .expectations-header h2 {
@@ -2905,6 +2936,32 @@ input[type="checkbox"] {
 .expectations-saved-toggle:has(input:focus-visible) {
     box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
 }
+
+.expectations-days-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.expectations-days-filter input {
+    width: 190px;
+    min-width: 190px;
+    height: 46px;
+    margin: 0;
+    text-align: center;
+}
+
+.expectations-days-filter button { margin: 0; white-space: nowrap; }
+
+.expectations-panel button:hover:not(:disabled),
+.expectations-modal button:hover:not(:disabled) {
+    color: #ffffff !important;
+}
+
+.expectations-panel button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
 .expectations-state {
     padding: 54px 16px;
     text-align: center;
@@ -2979,6 +3036,25 @@ input[type="checkbox"] {
     transition: color 150ms ease, background 150ms ease;
 }
 
+.expectations-summary-table th[data-sort-type] {
+    cursor: pointer;
+    user-select: none;
+    transition: color 150ms ease, background 150ms ease;
+}
+
+.expectations-summary-table th[data-sort-type]:hover,
+.expectations-summary-table th[data-sort-type]:focus-visible {
+    color: #ffffff;
+    background: rgba(30, 41, 59, 0.98);
+    outline: none;
+}
+
+.expectations-summary-table th[aria-sort="ascending"],
+.expectations-summary-table th[aria-sort="descending"] {
+    color: #7dd3fc;
+    background: rgba(14, 116, 144, 0.24);
+}
+
 .expectations-detail-table th[data-sort-key]:hover,
 .expectations-detail-table th[data-sort-key]:focus-visible {
     color: #ffffff;
@@ -3037,17 +3113,27 @@ input[type="checkbox"] {
 .expectations-modal-summary { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 18px 0; color: var(--text-muted); }
 .expectations-modal-summary strong { color: #f8fafc; direction: ltr; unicode-bidi: isolate; }
 .expectations-modal-open { overflow: hidden; }
+.nearest-expiry-modal-card { width: min(1120px, 96vw); }
+.nearest-expiry-modal-card .expectations-detail-table-wrap { margin-top: 18px; }
+.nearest-expiry-symbol { color: #e2e8f0; font-weight: 800; }
+.expectations-no-result { padding: 30px !important; color: var(--text-muted); text-align: center; }
 
 @media (max-width: 650px) {
     .expectations-panel { padding: 14px; }
     .expectations-header { align-items: stretch; flex-direction: column; }
-    .expectations-header > button {
+    .expectations-header-actions {
         position: static;
+        display: grid;
+        grid-template-columns: 1fr;
         width: 100%;
         margin-top: 12px;
     }
+    .expectations-header-actions > button { width: 100%; }
     .expectations-modal { padding: 8px; }
     .expectations-modal-card { width: 100%; padding: 14px; }
+    .expectations-days-filter { width: 100%; flex-direction: column; }
+    .expectations-days-filter input,
+    .expectations-days-filter button { width: 100%; min-width: 0; }
 }
 
 .spread-payoff-current-legend-point {

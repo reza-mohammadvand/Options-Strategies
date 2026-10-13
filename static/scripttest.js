@@ -4470,6 +4470,10 @@ function renderMarketExpectations(payload) {
 
     list.innerHTML = "";
     const bases = Array.isArray(payload?.bases) ? payload.bases : [];
+    const summaryButton = document.getElementById("nearest-expiry-summary");
+    if (summaryButton) summaryButton.disabled = bases.length === 0;
+    const expiringButton = document.getElementById("show-expiring-options");
+    if (expiringButton) expiringButton.disabled = bases.length === 0;
     empty.hidden = bases.length > 0;
     list.hidden = bases.length === 0;
 
@@ -4586,6 +4590,10 @@ async function loadMarketExpectations(force = false) {
     const list = document.getElementById("expectations-list");
     const empty = document.getElementById("expectations-empty");
     marketExpectationsLoading = true;
+    const summaryButton = document.getElementById("nearest-expiry-summary");
+    if (summaryButton) summaryButton.disabled = true;
+    const expiringButton = document.getElementById("show-expiring-options");
+    if (expiringButton) expiringButton.disabled = true;
     if (loading) {
         loading.hidden = false;
         loading.textContent = "در حال دریافت و محاسبه اطلاعات...";
@@ -4642,6 +4650,174 @@ function startMarketExpectationsAutoRefresh() {
             loadMarketExpectations(true);
         }
     }, 60_000);
+}
+
+function openNearestExpirySummary() {
+    const modal = document.getElementById("nearest-expiry-modal");
+    const tbody = modal?.querySelector(".nearest-expiry-table tbody");
+    const bases = marketExpectationsData?.bases;
+    if (!modal || !tbody || !Array.isArray(bases)) {
+        return;
+    }
+
+    const nearestGroups = bases.map((base, baseIndex) => {
+        const validGroups = Array.isArray(base.groups)
+            ? base.groups.filter(group =>
+                Number.isFinite(Number(group.days_remaining))
+                && Number(group.days_remaining) >= 0
+            )
+            : [];
+        if (!validGroups.length) return null;
+
+        const nearestGroup = validGroups.reduce((nearest, current) => (
+            Number(current.days_remaining) < Number(nearest.days_remaining)
+                ? current
+                : nearest
+        ));
+        return { base, baseIndex, group: nearestGroup };
+    }).filter(Boolean).sort((first, second) =>
+        String(first.base.base_symbol).localeCompare(
+            String(second.base.base_symbol),
+            "fa",
+            { sensitivity: "base" }
+        )
+    );
+
+    tbody.innerHTML = nearestGroups.map(({ base, baseIndex, group }) => `
+        <tr>
+            <td class="nearest-expiry-symbol" data-sort-value="${base.base_symbol}">${base.base_symbol}</td>
+            <td data-sort-value="${group.days_remaining}">${formatExpectationNumber(group.days_remaining)}</td>
+            <td data-sort-value="${group.expiry_date || ""}">${group.expiry_date || "—"}</td>
+            <td class="expectation-percent" data-sort-value="${group.minimum ?? ""}">${formatExpectationPercent(group.minimum)}</td>
+            <td class="expectation-percent" data-sort-value="${group.maximum ?? ""}">${formatExpectationPercent(group.maximum)}</td>
+            <td class="expectation-percent expectation-weighted" data-sort-value="${group.weighted_average ?? ""}">${formatExpectationPercent(group.weighted_average)}</td>
+            <td>
+                <button type="button" class="expectations-detail-link nearest-expiry-detail-link" data-base-index="${baseIndex}" data-group-id="${group.group_id}">
+                    مشاهده محاسبات
+                </button>
+            </td>
+        </tr>
+    `).join("");
+
+    resetExpectationSummarySort(modal.querySelector(".nearest-expiry-table"));
+
+    modal.hidden = false;
+    document.body.classList.add("expectations-modal-open");
+}
+
+function closeNearestExpirySummary() {
+    const modal = document.getElementById("nearest-expiry-modal");
+    if (modal) modal.hidden = true;
+    syncExpectationModalBodyState();
+}
+
+function openExpiringOptionsSummary() {
+    const input = document.getElementById("expectations-max-days");
+    const maximumDays = Number(input?.value);
+    if (!input || input.value.trim() === "" || !Number.isFinite(maximumDays) || maximumDays < 0) {
+        input?.setCustomValidity("لطفاً یک عدد صفر یا بزرگ‌تر وارد کنید.");
+        input?.reportValidity();
+        return;
+    }
+    input.setCustomValidity("");
+
+    const modal = document.getElementById("expiring-options-modal");
+    const tbody = modal?.querySelector(".expiring-options-table tbody");
+    const bases = marketExpectationsData?.bases;
+    if (!modal || !tbody || !Array.isArray(bases)) return;
+
+    const matches = [];
+    bases.forEach((base, baseIndex) => {
+        (base.groups || []).forEach(group => {
+            const days = Number(group.days_remaining);
+            if (Number.isFinite(days) && days >= 0 && days <= maximumDays) {
+                matches.push({ base, baseIndex, group });
+            }
+        });
+    });
+    matches.sort((first, second) =>
+        Number(first.group.days_remaining) - Number(second.group.days_remaining)
+        || String(first.base.base_symbol).localeCompare(String(second.base.base_symbol), "fa")
+    );
+
+    document.getElementById("expiring-options-modal-title").textContent =
+        `سررسیدهای کمتر یا مساوی ${formatExpectationNumber(maximumDays)} روز`;
+    tbody.innerHTML = matches.length
+        ? matches.map(({ base, baseIndex, group }) => `
+            <tr>
+                <td class="nearest-expiry-symbol" data-sort-value="${base.base_symbol}">${base.base_symbol}</td>
+                <td data-sort-value="${group.days_remaining}">${formatExpectationNumber(group.days_remaining)}</td>
+                <td data-sort-value="${group.expiry_date || ""}">${group.expiry_date || "—"}</td>
+                <td class="expectation-percent" data-sort-value="${group.minimum ?? ""}">${formatExpectationPercent(group.minimum)}</td>
+                <td class="expectation-percent" data-sort-value="${group.maximum ?? ""}">${formatExpectationPercent(group.maximum)}</td>
+                <td class="expectation-percent expectation-weighted" data-sort-value="${group.weighted_average ?? ""}">${formatExpectationPercent(group.weighted_average)}</td>
+                <td><button type="button" class="expectations-detail-link expiring-option-detail-link" data-base-index="${baseIndex}" data-group-id="${group.group_id}">مشاهده محاسبات</button></td>
+            </tr>`).join("")
+        : `<tr><td colspan="7" class="expectations-no-result">سررسیدی در این بازه پیدا نشد.</td></tr>`;
+
+    resetExpectationSummarySort(modal.querySelector(".expiring-options-table"));
+    modal.hidden = false;
+    document.body.classList.add("expectations-modal-open");
+}
+
+function closeExpiringOptionsSummary() {
+    const modal = document.getElementById("expiring-options-modal");
+    if (modal) modal.hidden = true;
+    syncExpectationModalBodyState();
+}
+
+function resetExpectationSummarySort(table) {
+    if (!table) return;
+    table.dataset.sortColumn = "";
+    table.dataset.sortDirection = "asc";
+    table.querySelectorAll("th[data-sort-type]").forEach(header => {
+        header.setAttribute("aria-sort", "none");
+        const indicator = header.querySelector(".expectations-sort-indicator");
+        if (indicator) indicator.textContent = "↕";
+    });
+}
+
+function sortExpectationSummaryTable(table, header) {
+    if (!table || !header) return;
+    const columnIndex = header.cellIndex;
+    const previousColumn = table.dataset.sortColumn;
+    const direction = previousColumn === String(columnIndex)
+        && table.dataset.sortDirection === "asc" ? "desc" : "asc";
+    const rows = [...table.querySelectorAll("tbody tr")]
+        .filter(row => row.children.length > 1);
+
+    rows.sort((firstRow, secondRow) => {
+        const firstValue = firstRow.children[columnIndex]?.dataset.sortValue ?? "";
+        const secondValue = secondRow.children[columnIndex]?.dataset.sortValue ?? "";
+        if (firstValue === "" && secondValue !== "") return 1;
+        if (secondValue === "" && firstValue !== "") return -1;
+
+        const comparison = header.dataset.sortType === "number"
+            ? Number(firstValue) - Number(secondValue)
+            : firstValue.localeCompare(secondValue, "fa", { numeric: true, sensitivity: "base" });
+        return direction === "asc" ? comparison : -comparison;
+    });
+
+    const tbody = table.querySelector("tbody");
+    rows.forEach(row => tbody.appendChild(row));
+    table.dataset.sortColumn = String(columnIndex);
+    table.dataset.sortDirection = direction;
+    table.querySelectorAll("th[data-sort-type]").forEach(item => {
+        const active = item === header;
+        item.setAttribute("aria-sort", active
+            ? (direction === "asc" ? "ascending" : "descending")
+            : "none");
+        const indicator = item.querySelector(".expectations-sort-indicator");
+        if (indicator) indicator.textContent = active
+            ? (direction === "asc" ? "▲" : "▼") : "↕";
+    });
+}
+
+function syncExpectationModalBodyState() {
+    document.body.classList.toggle(
+        "expectations-modal-open",
+        Boolean(document.querySelector(".expectations-modal:not([hidden])"))
+    );
 }
 
 function openExpectationDetails(baseIndex, groupId) {
@@ -4751,7 +4927,7 @@ function sortExpectationDetails(sortKey) {
 function closeExpectationDetails() {
     const modal = document.getElementById("expectations-modal");
     if (modal) modal.hidden = true;
-    document.body.classList.remove("expectations-modal-open");
+    syncExpectationModalBodyState();
 }
 
 document.addEventListener(
@@ -4791,6 +4967,20 @@ document.addEventListener(
             ?.addEventListener("click", () => loadMarketExpectations(true));
 
         document
+            .getElementById("nearest-expiry-summary")
+            ?.addEventListener("click", openNearestExpirySummary);
+
+        document
+            .getElementById("show-expiring-options")
+            ?.addEventListener("click", openExpiringOptionsSummary);
+
+        document
+            .getElementById("expectations-max-days")
+            ?.addEventListener("input", event => {
+                event.target.setCustomValidity("");
+            });
+
+        document
             .getElementById("expectations-search")
             ?.addEventListener("input", event => {
                 filterMarketExpectationSymbols(event.target.value);
@@ -4821,6 +5011,59 @@ document.addEventListener(
             ));
 
         document
+            .querySelectorAll("[data-close-nearest-expiry-modal]")
+            .forEach(element => element.addEventListener(
+                "click", closeNearestExpirySummary
+            ));
+
+        document
+            .querySelectorAll("[data-close-expiring-options-modal]")
+            .forEach(element => element.addEventListener(
+                "click", closeExpiringOptionsSummary
+            ));
+
+        document
+            .querySelector(".nearest-expiry-table tbody")
+            ?.addEventListener("click", event => {
+                const button = event.target.closest(".nearest-expiry-detail-link");
+                if (!button) return;
+                openExpectationDetails(
+                    Number(button.dataset.baseIndex),
+                    button.dataset.groupId
+                );
+            });
+
+        document
+            .querySelector(".expiring-options-table tbody")
+            ?.addEventListener("click", event => {
+                const button = event.target.closest(".expiring-option-detail-link");
+                if (!button) return;
+                openExpectationDetails(
+                    Number(button.dataset.baseIndex),
+                    button.dataset.groupId
+                );
+            });
+
+        document
+            .querySelectorAll(".expectations-summary-table thead")
+            .forEach(tableHead => {
+                const activateSort = event => {
+                    if (event.type === "keydown"
+                        && event.key !== "Enter"
+                        && event.key !== " ") return;
+                    const header = event.target.closest("th[data-sort-type]");
+                    if (!header) return;
+                    if (event.type === "keydown") event.preventDefault();
+                    sortExpectationSummaryTable(
+                        header.closest("table"),
+                        header
+                    );
+                };
+                tableHead.addEventListener("click", activateSort);
+                tableHead.addEventListener("keydown", activateSort);
+            });
+
+        document
             .querySelector(".expectations-detail-table thead")
             ?.addEventListener("click", event => {
                 const header = event.target.closest("th[data-sort-key]");
@@ -4838,7 +5081,15 @@ document.addEventListener(
             });
 
         document.addEventListener("keydown", event => {
-            if (event.key === "Escape") closeExpectationDetails();
+            if (event.key === "Escape") {
+                const detailModal = document.getElementById("expectations-modal");
+                if (detailModal && !detailModal.hidden) {
+                    closeExpectationDetails();
+                    return;
+                }
+                closeNearestExpirySummary();
+                closeExpiringOptionsSummary();
+            }
         });
     }
 );
