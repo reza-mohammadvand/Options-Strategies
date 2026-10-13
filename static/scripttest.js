@@ -4712,14 +4712,31 @@ function closeNearestExpirySummary() {
 }
 
 function openExpiringOptionsSummary() {
-    const input = document.getElementById("expectations-max-days");
-    const maximumDays = Number(input?.value);
-    if (!input || input.value.trim() === "" || !Number.isFinite(maximumDays) || maximumDays < 0) {
-        input?.setCustomValidity("لطفاً یک عدد صفر یا بزرگ‌تر وارد کنید.");
-        input?.reportValidity();
+    const minimumInput = document.getElementById("expectations-min-days");
+    const maximumInput = document.getElementById("expectations-max-days");
+    const minimumDays = minimumInput?.value.trim() === ""
+        ? 0
+        : Number(minimumInput?.value);
+    const maximumDays = Number(maximumInput?.value);
+
+    if (!Number.isFinite(minimumDays) || minimumDays < 0) {
+        minimumInput?.setCustomValidity("لطفاً یک عدد صفر یا بزرگ‌تر وارد کنید.");
+        minimumInput?.reportValidity();
         return;
     }
-    input.setCustomValidity("");
+    if (!maximumInput || maximumInput.value.trim() === ""
+        || !Number.isFinite(maximumDays) || maximumDays < 0) {
+        maximumInput?.setCustomValidity("لطفاً یک عدد صفر یا بزرگ‌تر وارد کنید.");
+        maximumInput?.reportValidity();
+        return;
+    }
+    if (minimumDays > maximumDays) {
+        maximumInput.setCustomValidity("مقدار «تا روز» باید بزرگ‌تر یا مساوی «از روز» باشد.");
+        maximumInput.reportValidity();
+        return;
+    }
+    minimumInput?.setCustomValidity("");
+    maximumInput.setCustomValidity("");
 
     const modal = document.getElementById("expiring-options-modal");
     const tbody = modal?.querySelector(".expiring-options-table tbody");
@@ -4730,7 +4747,7 @@ function openExpiringOptionsSummary() {
     bases.forEach((base, baseIndex) => {
         (base.groups || []).forEach(group => {
             const days = Number(group.days_remaining);
-            if (Number.isFinite(days) && days >= 0 && days <= maximumDays) {
+            if (Number.isFinite(days) && days >= minimumDays && days <= maximumDays) {
                 matches.push({ base, baseIndex, group });
             }
         });
@@ -4741,7 +4758,7 @@ function openExpiringOptionsSummary() {
     );
 
     document.getElementById("expiring-options-modal-title").textContent =
-        `سررسیدهای کمتر یا مساوی ${formatExpectationNumber(maximumDays)} روز`;
+        `سررسیدهای از ${formatExpectationNumber(minimumDays)} تا ${formatExpectationNumber(maximumDays)} روز`;
     tbody.innerHTML = matches.length
         ? matches.map(({ base, baseIndex, group }) => `
             <tr>
@@ -4978,6 +4995,15 @@ document.addEventListener(
             .getElementById("expectations-max-days")
             ?.addEventListener("input", event => {
                 event.target.setCustomValidity("");
+            });
+
+        document
+            .getElementById("expectations-min-days")
+            ?.addEventListener("input", event => {
+                event.target.setCustomValidity("");
+                document
+                    .getElementById("expectations-max-days")
+                    ?.setCustomValidity("");
             });
 
         document

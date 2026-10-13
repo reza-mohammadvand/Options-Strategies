@@ -2944,11 +2944,18 @@ input[type="checkbox"] {
 }
 
 .expectations-days-filter input {
-    width: 190px;
-    min-width: 190px;
+    width: 145px;
+    min-width: 145px;
     height: 46px;
     margin: 0;
     text-align: center;
+}
+
+.expectations-days-separator {
+    flex: 0 0 auto;
+    color: #7dd3fc;
+    font-size: 13px;
+    font-weight: 800;
 }
 
 .expectations-days-filter button { margin: 0; white-space: nowrap; }
@@ -3134,6 +3141,7 @@ input[type="checkbox"] {
     .expectations-days-filter { width: 100%; flex-direction: column; }
     .expectations-days-filter input,
     .expectations-days-filter button { width: 100%; min-width: 0; }
+    .expectations-days-separator { display: none; }
 }
 
 .spread-payoff-current-legend-point {

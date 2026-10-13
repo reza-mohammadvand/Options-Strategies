@@ -642,12 +642,21 @@
 
             <div class="expectations-days-filter">
                 <input
+                    id="expectations-min-days"
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputmode="numeric"
+                    placeholder="از روز"
+                >
+                <span class="expectations-days-separator">تا</span>
+                <input
                     id="expectations-max-days"
                     type="number"
                     min="0"
                     step="1"
                     inputmode="numeric"
-                    placeholder="حداکثر روز تا سررسید"
+                    placeholder="تا روز"
                 >
                 <button id="show-expiring-options" type="button" disabled>نمایش سررسیدها</button>
             </div>
